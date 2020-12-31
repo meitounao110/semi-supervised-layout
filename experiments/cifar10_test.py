@@ -1,5 +1,6 @@
 import sys
 import torch
+
 sys.path.append("..")
 import main
 from util.Config import parse_dict_args
@@ -16,16 +17,16 @@ def parameters():
 
         # Data
         'dataset': 'FPN',
-        'base_batch_size': 128,
-        'base_labeled_batch_size': 64,
-        'print_freq': 1,
-        'train_subdir': 'train/train',
-        'eval_subdir': 'test/0/test',
+        'base_batch_size': 32,
+        #'base_labeled_batch_size': 128,
+        'print_freq': 5,
+        'train_subdir': 'one_point/train/train',
+        'eval_subdir': 'one_point/test/0/test',
         'mean_layout': 0,
         'std_layout': 20000,
-        'list_path1': '/mnt/share1/layout_data/v0.3/data/all_walls/train/train.txt',  # 放无标签数据列表
-        'list_path2': '/mnt/share1/layout_data/v0.3/data/all_walls/train/val.txt',  #有标签
-        'test_list_path': '/mnt/share1/layout_data/v0.3/data/all_walls/test/test_0.txt',  # 存放测试样本
+        'list_path1': None,#'/mnt/layout_data/v0.3/data/one_point/train/train.txt',  # 放无标签数据列表
+        'list_path2': '/mnt/layout_data/v0.3/data/one_point/train/val.txt',  # 有标签
+        'test_list_path': '/mnt/layout_data/v0.3/data/one_point/test/test_0.txt',  # 存放测试样本
 
         # Architecture
         'arch': 'FPN1',
@@ -43,7 +44,7 @@ def parameters():
         # Optimization
         'loss': 'mse',
         'optim': 'adam',
-        'epochs': 100,
+        'epochs': 200,
         'base_lr': 0.001,
         'momentum': 0.9,
         'weight_decay': 5e-4,
@@ -61,25 +62,22 @@ def parameters():
         't1': 10,
         't2': 60,
         'af': 0.3,
-        'n_labels': 4000,
-        'data_seed': 10,
         'upsize': 200,
     }
 
     return defaults
 
 
-def run(base_batch_size, base_labeled_batch_size, base_lr, n_labels, data_seed, is_parallel, **kwargs):
+def run(base_batch_size, base_lr, is_parallel, **kwargs):
     if is_parallel and torch.cuda.is_available():
         ngpu = torch.cuda.device_count()
     else:
         ngpu = 1
     adapted_args = {
         'batch_size': base_batch_size * ngpu,
-        'labeled_batch_size': base_labeled_batch_size * ngpu,
+        #'labeled_batch_size': base_labeled_batch_size * ngpu,
         'lr': base_lr,
-        # 'labels': '../data-local/labels/cifar10/{}_balanced_labels/{:02d}.txt'.format(n_labels, data_seed),
-        'labels': '/mnt/share1/layout_data/v0.3/data/all_walls/train/val.txt',
+        #'labels': '/mnt/share1/layout_data/v0.3/data/all_walls/train/val.txt',
         'is_parallel': is_parallel,
     }
     args = parse_dict_args(**adapted_args, **kwargs)

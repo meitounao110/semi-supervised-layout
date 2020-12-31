@@ -8,10 +8,10 @@ from torch.nn.functional import interpolate
 from architectures.fpn import Fpn_n
 
 data = sio.loadmat(
-    "/mnt/share1/layout_data/v0.3/data/all_walls/test/0/test/Example10000.mat"
+    "/mnt/layout_data/v0.3/data/one_point/test/0/test/Example10002.mat"
 )
 u_true = data["u"]  # 真实温度
-F = data["F"]  # 布局
+F = data["f"]  # 布局
 
 fig1 = plt.figure(figsize=(10, 5))
 plt.subplot(121)
@@ -25,13 +25,13 @@ print(u_true.max())
 print(u_true.min())
 plt.show()
 
-PATH = '/mnt/share1/zhangyunyang/pseudo_label-pytorch-master/experiments/model/model_epoch_19.pth'
+PATH = '/mnt/zhangyunyang1/pseudo_label-pytorch-master/experiments/model/model.pth'
 model = Fpn_n()
 checkpoint = torch.load(PATH)
 model.load_state_dict(checkpoint['weight'])
 model.eval()
 
-F_tensor = (torch.from_numpy(F).float().unsqueeze(0).unsqueeze(0)) / 20000
+F_tensor = (torch.from_numpy(F.astype(float)).float().unsqueeze(0).unsqueeze(0)) / 20000
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 F_tensor = F_tensor.to(device)
 model = model.to(device)

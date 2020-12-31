@@ -95,8 +95,6 @@ def parse_dict_args(**kwargs):
                     for key, value in kwargs.items())
     cmdline_args = list(sum(kwargs_pairs, ()))  # ??
     #print('kwargs_pairs', kwargs_pairs)
-    print('cmdline_args', cmdline_args)
-
     print("Using these args: ", " ".join(cmdline_args))
     args = create_parser().parse_args(cmdline_args)
     return args

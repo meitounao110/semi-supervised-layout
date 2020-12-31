@@ -1,20 +1,17 @@
 #!coding:utf-8
 import os
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.optim import lr_scheduler
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
-
 import torchvision
 import torchvision.transforms as transforms
 from tensorboardX import SummaryWriter
-
 from util import datasets, Trainer
-from architectures.arch import arch as arch_n
 from architectures.fpn import Fpn_n
+import itertools
 
 from util.datasets import NO_LABEL
 
@@ -24,80 +21,57 @@ def data_loaders(
         eval_transform,
         heat_transform,
         datadir,
+        batch_size,
+        batch_size_ul,
         config):
-    traindir = os.path.join(datadir, config.train_subdir)
-    trainset = datasets.dataloader(root=traindir,
-                                   list_path1=config.list_path1,
-                                   list_path2=config.list_path2,
-                                   transform=train_transform,
-                                   target_transform=heat_transform,
-                                   max_iters=None)  # 这里缺最大数据量
-    if config.labels:  # 这里给出有标签列表，得到有标签的索引和无标签的索引
-        with open(config.labels) as f:
-            labels = f.read().splitlines()
-    labeled_idxs, unlabeled_idxs = datasets.relabel_dataset(trainset, labels)
-    # assert len(trainset.sample_files) == len(labeled_idxs) + len(unlabeled_idxs)
-    if config.labeled_batch_size < config.batch_size:  # 如果有标签batchsize小于总batchsize
-        assert len(unlabeled_idxs) > 0  # 无标签索引为0时报错
-        batch_sampler = datasets.TwoStreamBatchSampler(
-            unlabeled_idxs, labeled_idxs, config.batch_size, config.labeled_batch_size)
-    else:
-        sampler = SubsetRandomSampler(labeled_idxs)
-        batch_sampler = BatchSampler(sampler, config.batch_size, drop_last=True)
-    train_loader = torch.utils.data.DataLoader(trainset,
-                                               batch_sampler=batch_sampler,
-                                               num_workers=config.workers,
-                                               pin_memory=True)
     evaldir = os.path.join(datadir, config.eval_subdir)
-    # evalset = torchvision.datasets.ImageFolder(evaldir, eval_transform)
     evalset = datasets.dataloader(root=evaldir,
-                                  list_path1=config.test_list_path,
-                                  list_path2=None,
+                                  list_path=config.test_list_path,
                                   transform=eval_transform,
                                   target_transform=heat_transform,
                                   max_iters=None)
     eval_loader = torch.utils.data.DataLoader(evalset,
-                                              batch_size=config.batch_size,
+                                              batch_size=batch_size * 4,
                                               shuffle=False,
                                               num_workers=2 * config.workers,
                                               pin_memory=True,
                                               drop_last=False)  # 测试用的
+    traindir = os.path.join(datadir, config.train_subdir)
+    if config.list_path2 != 'None':
+        trainset_l = datasets.dataloader(root=traindir,
+                                         list_path=config.list_path2,
+                                         transform=train_transform,
+                                         target_transform=heat_transform,
+                                         max_iters=None)  # 这里缺最大数据量
+        labeled_idxs = list(range(len(trainset_l.sample_files)))
+        sampler = SubsetRandomSampler(labeled_idxs)
+        batch_sampler = BatchSampler(sampler, batch_size, drop_last=False)
+        train_l_loader = torch.utils.data.DataLoader(trainset_l,
+                                                     batch_sampler=batch_sampler,
+                                                     num_workers=config.workers,
+                                                     pin_memory=True)
+    if config.list_path1 != 'None':
+        trainset_ul = datasets.dataloader(root=traindir,
+                                          list_path=config.list_path1,
+                                          transform=train_transform,
+                                          target_transform=heat_transform,
+                                          max_iters=None)  # 这里缺最大数据量
+        unlabeled_idxs = list(range(len(trainset_ul.sample_files)))
+        sampler = SubsetRandomSampler(unlabeled_idxs)
+        batch_sampler = BatchSampler(sampler, batch_size_ul, drop_last=False)
+        train_ul_loader = torch.utils.data.DataLoader(trainset_ul,
+                                                      batch_sampler=batch_sampler,
+                                                      num_workers=config.workers,
+                                                      pin_memory=True)
+    if config.list_path2 != 'None' and config.list_path1 != 'None':
+        # train_loader = itertools.zip_longest(train_l_loader, train_ul_loader)
+        train_loader = {'l': train_l_loader, 'ul': train_ul_loader}
+    elif config.list_path2 == 'None' and config.list_path1 != 'None':
+        train_loader = train_ul_loader
+    elif config.list_path1 == 'None' and config.list_path2 != 'None':
+        train_loader = train_l_loader
+
     return train_loader, eval_loader
-
-
-# def create_data_loaders(train_transform,
-#                         eval_transform,
-#                         datadir,
-#                         config):
-#     traindir = os.path.join(datadir, config.train_subdir)
-#     trainset = torchvision.datasets.ImageFolder(traindir, train_transform)
-#     if config.labels:
-#         with open(config.labels) as f:
-#             labels = dict(line.split(' ') for line in f.read().splitlines())
-#         labeled_idxs, unlabeled_idxs = datasets.relabel_dataset(trainset, labels)
-#     assert len(trainset.imgs) == len(labeled_idxs) + len(unlabeled_idxs)
-#     # 这里用两个batchsize是因为，无标签和有标签的数据不一样，为了匹配，所以一个batch里需要一定比例的有标签和无标签
-#     if config.labeled_batch_size < config.batch_size:  # 如果有标签batchsize小于总batchsize
-#         assert len(unlabeled_idxs) > 0  # 无标签索引为0时报错
-#         batch_sampler = datasets.TwoStreamBatchSampler(
-#             unlabeled_idxs, labeled_idxs, config.batch_size, config.labeled_batch_size)
-#     else:
-#         sampler = SubsetRandomSampler(labeled_idxs)
-#         batch_sampler = BatchSampler(sampler, config.batch_size, drop_last=True)
-#     train_loader = torch.utils.data.DataLoader(trainset,
-#                                                batch_sampler=batch_sampler,
-#                                                num_workers=config.workers,
-#                                                pin_memory=True)
-#
-#     evaldir = os.path.join(datadir, config.eval_subdir)
-#     evalset = torchvision.datasets.ImageFolder(evaldir, eval_transform)
-#     eval_loader = torch.utils.data.DataLoader(evalset,
-#                                               batch_size=config.batch_size,
-#                                               shuffle=False,
-#                                               num_workers=2 * config.workers,
-#                                               pin_memory=True,
-#                                               drop_last=False)
-#     return train_loader, eval_loader
 
 
 def create_loss_fn(config):
@@ -129,7 +103,7 @@ def create_lr_scheduler(optimizer, config):
     elif config.lr_scheduler == 'multistep':
         if config.steps == "":
             return None
-        scheduler = lr_scheduler.MultiStepLR(optimizer,
+        scheduler = lr_scheduler.MultiStepLR(optimizer,  # 这里记得看一下
                                              milestones=config.steps,
                                              gamma=config.gamma)
     elif config.lr_scheduler == 'none':
@@ -160,7 +134,7 @@ def main(config):
             device1 = 'cuda:{}'.format(config.gpu) if torch.cuda.is_available() else 'cpu'
             net = net.to(device1)
         optimizer = create_optim(net.parameters(), config)
-        trainer = Trainer.PseudoLabel(net, optimizer, criterion, device1, config, writer,save_dir='./model')
+        trainer = Trainer.PseudoLabel(net, optimizer, criterion, device1, config, writer, save_dir='./model')
         scheduler = create_lr_scheduler(optimizer, config)
         trainer.loop(config.epochs, train_loader, eval_loader,
                      scheduler=scheduler, print_freq=config.print_freq)
